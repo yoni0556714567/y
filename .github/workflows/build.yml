@@ -1,5 +1,5 @@
 
-name: Android Build Diagnostic
+name: Android APK Build
 
 on:
   workflow_dispatch:
@@ -12,59 +12,43 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Extract ZIP
+        run: |
+          mkdir -p project
+          ZIP=$(find . -maxdepth 1 -iname "*.zip" -print -quit)
+          test -n "$ZIP" || { echo "ZIP not found"; exit 1; }
+          unzip -o "$ZIP" -d project
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Diagnose and Build
-        id: diagnose
-        continue-on-error: true
+      - name: Locate Gradle
         run: |
-          set -x
-          mkdir -p project logs
-
-          echo "=== Repository files ==="
-          ls -lah
-
-          echo "=== Finding ZIP ==="
-          ZIP=$(find . -maxdepth 1 -iname "*.zip" -print -quit)
-
-          if [ -z "$ZIP" ]; then
-            echo "ERROR: No ZIP found"
-            exit 1
-          fi
-
-          echo "ZIP found: $ZIP"
-          unzip -o "$ZIP" -d project
-
-          echo "=== Project structure ==="
-          find project -maxdepth 5 -type f | head -300
-
-          echo "=== Finding Gradle wrapper ==="
+          echo "Searching for Gradle..."
+          find project -type f \( -name gradlew -o -name settings.gradle -o -name settings.gradle.kts \)
           GRADLE=$(find project -type f -name gradlew -print -quit)
 
           if [ -z "$GRADLE" ]; then
-            echo "ERROR: gradlew not found"
+            echo "No gradlew found. Checking Gradle build files..."
+            find project -type f \( -name build.gradle -o -name build.gradle.kts \)
             exit 1
           fi
 
-          DIR=$(dirname "$GRADLE")
           chmod +x "$GRADLE"
+          echo "GRADLE_DIR=$(dirname "$GRADLE")" >> "$GITHUB_ENV"
 
-          echo "=== Java version ==="
-          java -version
+      - name: Build APK
+        run: |
+          cd "$GRADLE_DIR"
+          ./gradlew assembleDebug --stacktrace
 
-          echo "=== Gradle build ==="
-          cd "$DIR"
-          ./gradlew assembleDebug --stacktrace --info
-
-      - name: Save diagnostic logs
-        if: always()
+      - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Build-Diagnostics
-          path: |
-            project/
-          if-no-files-found: warn
+          name: Android-APK
+          path: '**/build/outputs/apk/**/*.apk'
+          if-no-files-found: error
