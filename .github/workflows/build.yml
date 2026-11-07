@@ -1,54 +1,20 @@
 
-name: Android APK Build
-
-on:
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Extract ZIP
-        run: |
-          mkdir -p project
-          ZIP=$(find . -maxdepth 1 -iname "*.zip" -print -quit)
-          test -n "$ZIP" || { echo "ZIP not found"; exit 1; }
-          unzip -o "$ZIP" -d project
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
       - name: Locate Gradle
         run: |
-          echo "Searching for Gradle..."
-          find project -type f \( -name gradlew -o -name settings.gradle -o -name settings.gradle.kts \)
-          GRADLE=$(find project -type f -name gradlew -print -quit)
+          echo "=== ZIP CONTENTS ==="
+          unzip -l ./*.zip
 
-          if [ -z "$GRADLE" ]; then
-            echo "No gradlew found. Checking Gradle build files..."
-            find project -type f \( -name build.gradle -o -name build.gradle.kts \)
-            exit 1
-          fi
+          echo "=== EXTRACTED PROJECT FILES ==="
+          find project -maxdepth 7 -type f | head -200
 
-          chmod +x "$GRADLE"
-          echo "GRADLE_DIR=$(dirname "$GRADLE")" >> "$GITHUB_ENV"
+          echo "=== BUILD CONFIGURATION FILES ==="
+          find project -type f \( \
+            -name "gradlew" -o \
+            -name "build.gradle" -o \
+            -name "build.gradle.kts" -o \
+            -name "settings.gradle" -o \
+            -name "settings.gradle.kts" \
+          \)
 
-      - name: Build APK
-        run: |
-          cd "$GRADLE_DIR"
-          ./gradlew assembleDebug --stacktrace
-
-      - name: Upload APK
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Android-APK
-          path: '**/build/outputs/apk/**/*.apk'
-          if-no-files-found: error
+          echo "=== ROOT DIRECTORIES ==="
+          ls -lah project
